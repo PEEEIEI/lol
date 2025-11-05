@@ -1,0 +1,550 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Workout Tracker Pro — เวอร์ชันอัปเกรด</title>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+  :root{
+    --bg:#f5f7ff; --card:#ffffff; --muted:#65748b; --accent:#246bff;
+    --accent-2:#1ea3a3; --danger:#e04141;
+  }
+  *{box-sizing:border-box}
+  body{font-family:Inter, "Noto Sans Thai", Roboto, sans-serif; margin:0; padding:18px; background:var(--bg); color:#0f1724}
+  .container{max-width:1100px;margin:0 auto}
+  header{display:flex;align-items:center;gap:14px}
+  h1{margin:0;font-size:20px}
+  .top-row{display:flex;gap:12px;align-items:center;margin-top:12px;flex-wrap:wrap}
+  .card{background:var(--card);padding:14px;border-radius:12px;box-shadow:0 8px 24px rgba(10,20,50,0.06)}
+  .grid{display:grid;grid-template-columns:1fr 380px;gap:14px;margin-top:14px}
+  label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+  input,select,textarea,button{font-size:14px}
+  input,select,textarea{width:100%;padding:8px;border-radius:8px;border:1px solid #e6e9f2}
+  button{cursor:pointer;border:0;border-radius:8px;padding:8px 12px;background:var(--accent);color:white}
+  .small{font-size:13px;color:var(--muted)}
+  .row{display:flex;gap:8px;align-items:center}
+  ul.log{list-style:none;padding:0;margin:0;max-height:360px;overflow:auto}
+  ul.log li{display:flex;justify-content:space-between;padding:8px;border-bottom:1px solid #f0f2fb}
+  .stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
+  .stat{background:#fbfdff;padding:10px;border-radius:8px;text-align:center}
+  .muted{color:var(--muted)}
+  .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  .export{background:#eef3ff;color:var(--accent);padding:8px;border-radius:8px;border:1px solid #dce8ff}
+  .danger{background:#fff3f3;color:var(--danger);border:1px solid #ffd6d6}
+  .calendar{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+  .cal-cell{min-height:80px;padding:8px;border-radius:8px;background:#fbfdff;border:1px solid #eef2ff;position:relative}
+  .cal-cell .date{position:absolute;top:6px;right:8px;font-size:12px;color:var(--muted)}
+  .cal-cell .dots{display:flex;gap:4px;flex-wrap:wrap;margin-top:18px}
+  .dot{width:8px;height:8px;border-radius:50%}
+  .dot.done{background:var(--accent)}
+  .dot.planned{background:var(--accent-2)}
+  .cell-empty{background:transparent;border:0}
+  @media(max-width:980px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div>
+      <h1>Workout Tracker Pro</h1>
+      <div class="small muted">ครบทั้งปฏิทิน, แจ้งเตือน, และสถิติแบบละเอียด — เก็บบนเครื่อง (local)</div>
+    </div>
+  </header>
+
+  <div class="top-row">
+    <div class="card" style="flex:1;display:flex;gap:10px;align-items:center">
+      <div>
+        <strong class="small muted">สถานะการแจ้งเตือน</strong>
+        <div id="notif-status" style="font-weight:600">ยังไม่ได้อนุญาต</div>
+      </div>
+      <div style="margin-left:auto">
+        <button id="request-perm">ขออนุญาตแจ้งเตือน</button>
+        <button id="test-notif" class="export">ทดสอบแจ้งเตือน</button>
+      </div>
+    </div>
+
+    <div class="card" style="width:320px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div class="small muted">ตั้งค่าเป้ารายสัปดาห์</div>
+          <div style="font-weight:700;font-size:18px" id="goal-display">3 ครั้ง/สัปดาห์</div>
+        </div>
+        <div>
+          <input id="weekly-goal" type="number" min="0" style="width:80px" value="3" />
+        </div>
+      </div>
+      <div style="margin-top:8px" class="small muted">เวลาแจ้งเตือนก่อน (นาที)</div>
+      <input id="lead-minutes" type="number" min="0" value="10" />
+    </div>
+  </div>
+
+  <div class="grid">
+    <!-- LEFT: logging, calendar, history -->
+    <div>
+      <div class="card">
+        <h3>เพิ่ม / แก้บันทึก</h3>
+        <div style="display:grid;grid-template-columns:1fr 140px;gap:8px">
+          <div>
+            <label>วันที่</label>
+            <input type="date" id="input-date" />
+          </div>
+          <div>
+            <label>เวลา</label>
+            <input type="time" id="input-time" />
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 120px;gap:8px;margin-top:8px">
+          <div>
+            <label>ชื่อแบบฝึก / กิจกรรม</label>
+            <input id="template-input" placeholder="เช่น Full body 30" />
+          </div>
+          <div>
+            <label>นาที</label>
+            <input id="duration" type="number" min="0" />
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 120px;gap:8px;margin-top:8px">
+          <div>
+            <label>บันทึก / หมายเหตุ</label>
+            <input id="note" placeholder="เช่น วอร์ม 5 นาที, HIIT 20" />
+          </div>
+          <div>
+            <label>ความเข้ม (RPE)</label>
+            <select id="rpe">
+              <option value="0">0 (พัก)</option>
+              <option>1</option><option>2</option><option>3</option><option>4</option>
+              <option>5</option><option>6</option><option>7</option><option>8</option>
+              <option>9</option><option>10</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button id="save-session">บันทึกและเช็คว่าเสร็จแล้ว ✅</button>
+          <button id="save-planned" class="export">บันทึกเป็นวางแผน (Planned)</button>
+          <button id="clear-form" class="danger">ยกเลิก</button>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:12px">
+        <h3>ปฏิทิน (เดือน)</h3>
+        <div style="display:flex;gap:8px;align-items:center;justify-content:space-between">
+          <div>
+            <button id="prev-month" class="export">◀</button>
+            <span id="month-label" style="font-weight:600;margin:0 8px"></span>
+            <button id="next-month" class="export">▶</button>
+          </div>
+          <div class="small muted">คลิกวันที่เพื่อดู / เพิ่ม session</div>
+        </div>
+        <div style="margin-top:8px" id="calendar" class="calendar card" ></div>
+      </div>
+
+      <div class="card" style="margin-top:12px">
+        <h3>ประวัติ (ล่าสุด)</h3>
+        <ul id="session-log" class="log"></ul>
+        <div class="actions">
+          <button id="export-json" class="export">Export JSON</button>
+          <button id="import-json" class="export">Import JSON</button>
+          <input type="file" id="file-input" style="display:none" accept=".json" />
+          <button id="export-csv" class="export">Export CSV</button>
+          <button id="clear-all" class="danger">เคลียร์ทั้งหมด</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: stats & graphs -->
+    <div>
+      <div class="card">
+        <h3>สถิติ</h3>
+        <div class="stat-grid" id="stats">
+          <div class="stat">
+            <div class="muted">รวมครั้ง (สำเร็จ)</div>
+            <div id="stat-total" style="font-weight:700;font-size:18px">0</div>
+          </div>
+          <div class="stat">
+            <div class="muted">สัปดาห์นี้</div>
+            <div id="stat-week" style="font-weight:700;font-size:18px">0</div>
+          </div>
+          <div class="stat">
+            <div class="muted">สัปดาห์ก่อน</div>
+            <div id="stat-week-prev" style="font-weight:700;font-size:18px">0</div>
+          </div>
+        </div>
+
+        <div style="margin-top:10px">
+          <div class="muted">อัตราทำตามเป้าสัปดาห์</div>
+          <div id="goal-status" style="font-weight:700;margin-top:4px">0/3</div>
+        </div>
+
+        <div style="margin-top:10px" class="muted">Streak (ติดต่อกัน)</div>
+        <div id="streak" style="font-weight:700">0 วัน</div>
+      </div>
+
+      <div class="card" style="margin-top:12px">
+        <h3>กราฟ 30 วัน</h3>
+        <canvas id="chart-30" height="160"></canvas>
+      </div>
+
+      <div class="card" style="margin-top:12px">
+        <h3>กราฟเปรียบเทียบสัปดาห์</h3>
+        <canvas id="chart-week" height="140"></canvas>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+/* STORAGE structure
+app = { sessions: [{id,date,time,template,duration,rpe,note,status:'done'|'planned',createdAt}], settings:{weeklyGoal,leadMinutes}, ui:{currentYear,currentMonth} }
+*/
+
+const KEY = 'workout_tracker_pro_v1';
+let app = load();
+const todayStr = (d=new Date())=> d.toISOString().slice(0,10);
+
+function load(){
+  const raw = localStorage.getItem(KEY);
+  if(raw) try{ return JSON.parse(raw); }catch(e){}
+  const now = new Date();
+  return {
+    sessions: [],
+    settings:{ weeklyGoal:3, leadMinutes:10 },
+    ui:{ currentYear: now.getFullYear(), currentMonth: now.getMonth() } // 0-index month
+  };
+}
+function save(){ localStorage.setItem(KEY, JSON.stringify(app)); renderAll(); }
+
+/* Utils */
+function uid(p='id'){ return p+Math.random().toString(36).slice(2,9) }
+function fmtDateYMD(d){ const dt = new Date(d); if(isNaN(dt)) return ''; return dt.toISOString().slice(0,10); }
+function fmtTime(t){ return t || '' }
+function parseDate(dstr){ // returns Date at local midnight
+  const [y,m,d] = dstr.split('-').map(Number); return new Date(y,m-1,d);
+}
+function formatMonthLabel(y,m){ const names=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']; return `${names[m]} ${y}` }
+
+/* Elements */
+const inputDate = document.getElementById('input-date');
+const inputTime = document.getElementById('input-time');
+const templateInput = document.getElementById('template-input');
+const durationEl = document.getElementById('duration');
+const noteEl = document.getElementById('note');
+const rpeEl = document.getElementById('rpe');
+const saveBtn = document.getElementById('save-session');
+const savePlannedBtn = document.getElementById('save-planned');
+const clearFormBtn = document.getElementById('clear-form');
+const calendarEl = document.getElementById('calendar');
+const monthLabel = document.getElementById('month-label');
+const prevMonth = document.getElementById('prev-month');
+const nextMonth = document.getElementById('next-month');
+const sessionLog = document.getElementById('session-log');
+const exportJsonBtn = document.getElementById('export-json');
+const importJsonBtn = document.getElementById('import-json');
+const fileInput = document.getElementById('file-input');
+const exportCsvBtn = document.getElementById('export-csv');
+const clearAllBtn = document.getElementById('clear-all');
+const weeklyGoalEl = document.getElementById('weekly-goal');
+const goalDisplay = document.getElementById('goal-display');
+const leadMinutesEl = document.getElementById('lead-minutes');
+const notifStatus = document.getElementById('notif-status');
+const requestPermBtn = document.getElementById('request-perm');
+const testNotifBtn = document.getElementById('test-notif');
+
+const statTotal = document.getElementById('stat-total');
+const statWeek = document.getElementById('stat-week');
+const statWeekPrev = document.getElementById('stat-week-prev');
+const goalStatus = document.getElementById('goal-status');
+const streakEl = document.getElementById('streak');
+
+const chart30Ctx = document.getElementById('chart-30').getContext('2d');
+const chartWeekCtx = document.getElementById('chart-week').getContext('2d');
+let chart30, chartWeek;
+
+/* Init form defaults */
+inputDate.value = todayStr();
+inputTime.value = '';
+weeklyGoalEl.value = app.settings.weeklyGoal || 3;
+leadMinutesEl.value = app.settings.leadMinutes || 10;
+
+/* Event listeners */
+saveBtn.addEventListener('click', ()=> {
+  const s = makeSession('done'); app.sessions.push(s); save(); clearForm();
+});
+savePlannedBtn.addEventListener('click', ()=> {
+  const s = makeSession('planned'); app.sessions.push(s); save(); clearForm();
+});
+clearFormBtn.addEventListener('click', clearForm);
+
+prevMonth.addEventListener('click', ()=> {
+  const ui = app.ui; ui.currentMonth--;
+  if(ui.currentMonth<0){ ui.currentMonth=11; ui.currentYear--; } save();
+});
+nextMonth.addEventListener('click', ()=> {
+  const ui = app.ui; ui.currentMonth++;
+  if(ui.currentMonth>11){ ui.currentMonth=0; ui.currentYear++; } save();
+});
+
+exportJsonBtn.addEventListener('click', ()=>{
+  const blob = new Blob([JSON.stringify(app, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='workout-pro-data.json'; a.click(); URL.revokeObjectURL(url);
+});
+importJsonBtn.addEventListener('click', ()=> fileInput.click());
+fileInput.addEventListener('change', (e)=>{
+  const f = e.target.files[0]; if(!f) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try{
+      const imported = JSON.parse(ev.target.result);
+      if(confirm('นำเข้าข้อมูล จะ **แทนที่** ข้อมูลปัจจุบัน ใช่หรือไม่?')){ app = imported; save(); }
+    }catch(err){ alert('ไฟล์ไม่ถูกต้อง'); }
+  }; reader.readAsText(f);
+});
+exportCsvBtn.addEventListener('click', ()=>{
+  const rows=[['id','date','time','template','duration','rpe','note','status','createdAt']];
+  app.sessions.forEach(s=> rows.push([s.id,s.date,s.time,s.template,s.duration,s.rpe,s.note,s.status,s.createdAt]));
+  const csv = rows.map(r=> r.map(c=>`"${(''+(c||'')).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='workout-sessions.csv'; a.click(); URL.revokeObjectURL(url);
+});
+clearAllBtn.addEventListener('click', ()=> {
+  if(confirm('เคลียร์ข้อมูลทั้งหมดจากเครื่อง?')){ app={sessions:[],settings:{weeklyGoal:3,leadMinutes:10},ui:app.ui}; save(); }
+});
+
+weeklyGoalEl.addEventListener('change', ()=> { app.settings.weeklyGoal = Number(weeklyGoalEl.value)||0; save(); });
+leadMinutesEl.addEventListener('change', ()=> { app.settings.leadMinutes = Number(leadMinutesEl.value)||0; save(); });
+
+requestPermBtn.addEventListener('click', requestPermission);
+testNotifBtn.addEventListener('click', ()=> sendNotification('ทดสอบแจ้งเตือน', 'นี่คือการทดสอบแจ้งเตือนจาก Workout Tracker Pro'));
+
+/* Create session object from form */
+function makeSession(status='done'){
+  return {
+    id: uid('s'),
+    date: inputDate.value || todayStr(),
+    time: inputTime.value || '',
+    template: (templateInput.value||'').trim() || '(ไม่มีชื่อ)',
+    duration: Number(durationEl.value) || 0,
+    rpe: Number(rpeEl.value) || 0,
+    note: (noteEl.value||'').trim(),
+    status,
+    createdAt: new Date().toISOString()
+  };
+}
+function clearForm(){
+  inputDate.value = todayStr(); inputTime.value=''; templateInput.value=''; durationEl.value=''; noteEl.value=''; rpeEl.value='0';
+}
+
+/* Rendering functions */
+function renderCalendar(){
+  calendarEl.innerHTML = '';
+  const year = app.ui.currentYear; const month = app.ui.currentMonth;
+  monthLabel.textContent = formatMonthLabel(year, month);
+  // header: weekdays
+  const days = ['จ','อ','อ','พ','พ','ศ','ส']; // single char
+  days.forEach(d=> {
+    const hd = document.createElement('div'); hd.className='cal-cell cell-empty'; hd.innerHTML=`<div style="font-weight:600;text-align:center">${d}</div>`; calendarEl.appendChild(hd);
+  });
+
+  const first = new Date(year, month, 1);
+  const startWeekday = (first.getDay()+6)%7; // make monday=0 (Thai week start Monday)
+  // add blanks
+  for(let i=0;i<startWeekday;i++) {
+    const blank = document.createElement('div'); blank.className='cal-cell cell-empty'; calendarEl.appendChild(blank);
+  }
+  const daysInMonth = new Date(year, month+1, 0).getDate();
+  for(let d=1; d<=daysInMonth; d++){
+    const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const cell = document.createElement('div'); cell.className='cal-cell';
+    cell.innerHTML = `<div class="date">${d}</div><div class="dots"></div>`;
+    // add dots for sessions
+    const dots = cell.querySelector('.dots');
+    const sessions = app.sessions.filter(s=> s.date===dateStr);
+    sessions.forEach(s=>{
+      const el = document.createElement('div'); el.className='dot '+(s.status==='done'?'done':'planned'); el.title = `${s.template} ${s.time||''} (${s.status})`;
+      el.addEventListener('click', (ev)=>{ ev.stopPropagation(); showSessionListForDate(dateStr); });
+      dots.appendChild(el);
+    });
+    // click to add new session for that date
+    cell.addEventListener('click', ()=> {
+      inputDate.value = dateStr; inputTime.focus();
+    });
+    calendarEl.appendChild(cell);
+  }
+}
+
+function showSessionListForDate(dateStr){
+  const list = app.sessions.filter(s=> s.date===dateStr).sort((a,b)=> (a.time||'')< (b.time||'') ? -1:1);
+  const lines = list.map(s=> `${s.time||'--'} — ${s.template} [${s.status}] (RPE:${s.rpe})`).join('\n');
+  alert(`รายการวันที่ ${dateStr}:\n\n${lines || '(ไม่มีรายการ)'}`);
+}
+
+function renderLog(){
+  const items = app.sessions.slice().sort((a,b)=> new Date(b.createdAt)-new Date(a.createdAt));
+  sessionLog.innerHTML = items.map(s=>{
+    return `<li>
+      <div style="flex:1">
+        <div style="font-weight:600">${s.template} <span class="small muted">· ${s.date} ${s.time||''}</span></div>
+        <div class="small muted">${s.duration} นาที · RPE ${s.rpe} · ${s.note||''}</div>
+      </div>
+      <div style="margin-left:12px;text-align:right">
+        <div style="margin-bottom:6px">
+          <button data-id="${s.id}" class="toggle-done">${s.status==='done' ? '✅' : '☑️'}</button>
+          <button data-id="${s.id}" class="edit">แก้</button>
+          <button data-id="${s.id}" class="del" style="color:var(--danger)">ลบ</button>
+        </div>
+        <div class="small muted">${new Date(s.createdAt).toLocaleString()}</div>
+      </div>
+    </li>`;
+  }).join('');
+  // attach actions
+  sessionLog.querySelectorAll('.del').forEach(btn=> btn.addEventListener('click', e=>{
+    const id = e.target.dataset.id;
+    if(confirm('ลบรายการนี้จริงหรือไม่?')){ app.sessions = app.sessions.filter(x=>x.id!==id); save(); }
+  }));
+  sessionLog.querySelectorAll('.toggle-done').forEach(btn=> btn.addEventListener('click', e=>{
+    const id = e.target.dataset.id; const s = app.sessions.find(x=>x.id===id); if(!s) return;
+    s.status = s.status==='done' ? 'planned' : 'done'; save();
+  }));
+  sessionLog.querySelectorAll('.edit').forEach(btn=> btn.addEventListener('click', e=>{
+    const id = e.target.dataset.id; const s = app.sessions.find(x=>x.id===id); if(!s) return;
+    inputDate.value = s.date; inputTime.value = s.time; templateInput.value = s.template; durationEl.value = s.duration; rpeEl.value = s.rpe; noteEl.value = s.note;
+    // remove old so saving creates fresh (simple edit flow)
+    if(confirm('แก้ไขข้อมูล: เมื่อบันทึกใหม่ ระบบจะลบรายการเก่าและสร้างรายการใหม่ ใช่หรือไม่?')){ app.sessions = app.sessions.filter(x=>x.id!==id); save(); }
+  }));
+}
+
+/* Stats */
+function computeStatsAndRender(){
+  const now = new Date();
+  const total = app.sessions.filter(s=> s.status==='done').length;
+  // week boundaries (Mon-Sun). current week start:
+  const day = now.getDay(); const diff = (day+6)%7; const startOfWeek = new Date(now); startOfWeek.setDate(now.getDate()-diff); startOfWeek.setHours(0,0,0,0);
+  const startOfPrev = new Date(startOfWeek); startOfPrev.setDate(startOfWeek.getDate()-7);
+  const weekCount = app.sessions.filter(s=> s.status==='done' && new Date(s.date) >= startOfWeek).length;
+  const weekPrevCount = app.sessions.filter(s=> s.status==='done' && new Date(s.date) >= startOfPrev && new Date(s.date) < startOfWeek).length;
+
+  statTotal.textContent = total;
+  statWeek.textContent = weekCount;
+  statWeekPrev.textContent = weekPrevCount;
+  const goal = Number(app.settings.weeklyGoal)||0; goalStatus.textContent = `${weekCount}/${goal} ครั้ง`;
+  goalDisplay.textContent = `${goal} ครั้ง/สัปดาห์`;
+
+  // streak: consecutive days up to today
+  const doneDates = Array.from(new Set(app.sessions.filter(s=>s.status==='done').map(s=> s.date ))).sort();
+  let streak = 0; let d = new Date(); while(true){
+    const fd = d.toISOString().slice(0,10);
+    if(doneDates.includes(fd)){ streak++; d.setDate(d.getDate()-1); } else break;
+  }
+  streakEl.textContent = streak + ' วัน';
+}
+
+/* Charts */
+function renderCharts(){
+  // chart 30 days
+  const labels = []; const counts=[];
+  for(let i=29;i>=0;i--){
+    const d = new Date(); d.setDate(d.getDate()-i); const fd = d.toISOString().slice(0,10);
+    labels.push(fd.slice(5));
+    counts.push(app.sessions.filter(s=> s.status==='done' && s.date===fd).length);
+  }
+  if(chart30) chart30.destroy();
+  chart30 = new Chart(chart30Ctx, {
+    type:'bar',
+    data:{ labels, datasets:[{ label:'ครั้ง/วัน (30 วัน)', data:counts, borderRadius:6, barPercentage:0.8 }] },
+    options:{ plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true,ticks:{stepSize:1}}, x:{grid:{display:false}} } }
+  });
+
+  // weekly comparison (this week vs prev week) — or full week bars
+  const weekLabels = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const thisWeek = new Array(7).fill(0); const prevWeek = new Array(7).fill(0);
+  const now = new Date();
+  const dayIdx = (new Date()).getDay(); const diff = (dayIdx+6)%7; // monday index 0
+  const startOfWeek = new Date(now); startOfWeek.setDate(now.getDate()-diff); startOfWeek.setHours(0,0,0,0);
+  for(let i=0;i<7;i++){
+    const d = new Date(startOfWeek); d.setDate(startOfWeek.getDate()+i);
+    const fd = d.toISOString().slice(0,10);
+    thisWeek[i] = app.sessions.filter(s=> s.status==='done' && s.date===fd).length;
+    const prev = new Date(d); prev.setDate(d.getDate()-7);
+    prevWeek[i] = app.sessions.filter(s=> s.status==='done' && s.date===prev.toISOString().slice(0,10)).length;
+  }
+  if(chartWeek) chartWeek.destroy();
+  chartWeek = new Chart(chartWeekCtx, {
+    type:'bar',
+    data:{ labels:weekLabels, datasets:[
+      { label:'สัปดาห์นี้', data:thisWeek, borderRadius:6, barPercentage:0.45 },
+      { label:'สัปดาห์ก่อน', data:prevWeek, borderRadius:6, barPercentage:0.45 }
+    ]},
+    options:{ scales:{y:{beginAtZero:true,ticks:{stepSize:1}}} }
+  });
+}
+
+/* Notifications */
+function updateNotifStatus(){
+  if(!('Notification' in window)){ notifStatus.textContent = 'เบราว์เซอร์ไม่รองรับการแจ้งเตือน'; return; }
+  if(Notification.permission === 'granted') notifStatus.textContent = 'อนุญาตแล้ว';
+  else if(Notification.permission === 'denied') notifStatus.textContent = 'ปฏิเสธการแจ้งเตือน';
+  else notifStatus.textContent = 'ยังไม่ได้อนุญาต';
+}
+
+function requestPermission(){
+  if(!('Notification' in window)){ alert('เบราว์เซอร์นี้ไม่รองรับ API แจ้งเตือน'); return; }
+  Notification.requestPermission().then(p => { updateNotifStatus(); if(p==='granted') scheduleChecks(); });
+}
+
+function sendNotification(title, body){
+  if(Notification.permission === 'granted'){
+    const n = new Notification(title, { body, tag:'workout-tracker-pro' });
+    try{ n.sound = ''; }catch(e){}
+  } else alert('ยังไม่ได้อนุญาตแจ้งเตือน — กด "ขออนุญาตแจ้งเตือน" ก่อน');
+}
+
+// schedule check: runs every minute while page open, finds planned sessions coming within leadMinutes and notify
+let checkInterval = null;
+function scheduleChecks(){
+  if(checkInterval) clearInterval(checkInterval);
+  checkInterval = setInterval(()=> {
+    const now = new Date();
+    const lead = (Number(app.settings.leadMinutes) || 10);
+    // find planned sessions today or tomorrow within lead minutes
+    app.sessions.forEach(s=>{
+      if(s.status !== 'planned') return;
+      if(!s.time) return;
+      const [hh,mm] = s.time.split(':').map(Number);
+      const dt = new Date(s.date + 'T' + (s.time || '00:00'));
+      // local timezone: dt will be parsed as UTC by Safari, so construct properly:
+      const parts = s.date.split('-').map(Number);
+      const localDt = new Date(parts[0], parts[1]-1, parts[2], hh||0, mm||0, 0, 0);
+      const diffMin = (localDt - now) / 60000;
+      if(diffMin >=0 && diffMin <= lead){
+        // only notify once: flip a flag 'notified'
+        if(!s._notified){
+          sendNotification('เตือน: ใกล้เวลาออกกำลังกาย', `${s.template} เวลา ${s.time} (${Math.round(diffMin)} นาที)`);
+          s._notified = true; // transient flag (not persisted) to avoid duplicate while page open
+        }
+      }
+    });
+  }, 60*1000); // every minute
+}
+
+/* Initial scheduling if already granted */
+updateNotifStatus();
+if(Notification.permission === 'granted') scheduleChecks();
+
+/* Main render all */
+function renderAll(){
+  renderCalendar(); renderLog(); computeStatsAndRender(); renderCharts(); updateNotifStatus();
+}
+renderAll();
+
+/* Autosave on unload to persist transient flags removal */
+window.addEventListener('beforeunload', ()=> save() );
+
+/* Start a background timer to check more frequently for new planned sessions (also trigger at load) */
+setTimeout(()=> scheduleChecks(), 2000);
+</script>
+</body>
+</html>
