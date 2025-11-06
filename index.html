@@ -538,22 +538,89 @@ function computeStatsAndRender(){
 }
 
 /* Charts */
+/* Charts */
 function renderCharts(){
   // chart 30 days
-  const labels = []; const counts=[];
+  const labels = []; 
+  const counts = [];
+  const durations = []; 
+  
   for(let i=29;i>=0;i--){
     const d = new Date(); d.setDate(d.getDate()-i); const fd = d.toISOString().slice(0,10);
     labels.push(fd.slice(5));
-    counts.push(app.sessions.filter(s=> s.status==='done' && s.date===fd).length);
+    const doneSessions = app.sessions.filter(s=> s.status==='done' && s.date===fd);
+
+    counts.push(doneSessions.length);
+    const totalDuration = doneSessions.reduce((sum, s) => sum + (Number(s.duration) || 0), 0);
+    durations.push(totalDuration);
   }
+
   if(chart30) chart30.destroy();
   chart30 = new Chart(chart30Ctx, {
-    type:'bar',
-    data:{ labels, datasets:[{ label:'ครั้ง/วัน (30 วัน)', data:counts, borderRadius:6, barPercentage:0.8 }] },
-    options:{ plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true,ticks:{stepSize:1}}, x:{grid:{display:false}} } }
+    type:'bar', 
+    data:{ 
+      labels, 
+      datasets:[
+        // Dataset 1: จำนวนครั้ง (Bar Chart) - อ้างถึงแกน 'y'
+        { 
+          label:'ครั้ง/วัน', 
+          data:counts, 
+          borderRadius:6, 
+          barPercentage:0.8,
+          backgroundColor: 'rgba(36, 107, 255, 0.7)', 
+          yAxisID: 'y' 
+        },
+        // Dataset 2: ระยะเวลารวม (Line Chart) - อ้างถึงแกน 'y1'
+        { 
+          label:'นาทีรวม', 
+          data:durations, 
+          type:'line', 
+          borderColor: 'rgb(30, 163, 163)', 
+          borderWidth: 3,
+          pointRadius: 4,
+          tension: 0.3, 
+          fill: false,
+          yAxisID: 'y1' 
+        }
+      ] 
+    },
+    options:{ 
+      responsive: true,
+      plugins:{
+        legend:{display:true, position:'top'} 
+      }, 
+      scales:{
+        // ✅ โครงสร้างแกน Y หลัก (จำนวนครั้ง)
+        y:{
+          type: 'linear',
+          display: true,
+          position: 'left',
+          beginAtZero:true,
+          title: { display: true, text: 'จำนวนครั้ง' },
+          ticks:{stepSize:1}
+        }, 
+        // ✅ โครงสร้างแกน Y รอง (นาทีรวม)
+        y1: {
+          type: 'linear',
+          display: true,
+          position: 'right', // ต้องอยู่ด้านขวา
+          grid: { drawOnChartArea: false }, 
+          title: { display: true, text: 'นาทีรวม' },
+          min: 0, 
+          // ปรับ Ticks ให้น้อยลงเพื่อลดภาระการเรนเดอร์และหลีกเลี่ยง Bug
+          ticks: {
+             maxTicksLimit: 5,
+             callback: function(value) {
+                 return Number.isInteger(value) ? value : '';
+             }
+          }
+        },
+        x:{grid:{display:false}} 
+      } 
+    }
   });
 
-  // weekly comparison (this week vs prev week) — or full week bars
+  // ... (ส่วน chartWeek เหมือนเดิม)
   const weekLabels = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
   const thisWeek = new Array(7).fill(0); const prevWeek = new Array(7).fill(0);
   const now = new Date();
